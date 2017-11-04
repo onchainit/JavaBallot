@@ -5,6 +5,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 
@@ -20,8 +21,6 @@ import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
 @Path("/api")
 public class BallotResource {
 
-	private BallotService service;
-
 	@POST
 	@Path("/loadWallet")
 	@Consumes("multipart/form-data")
@@ -33,6 +32,43 @@ public class BallotResource {
 		
 //		System.out.println("pwd: " + formParts.get("password").iterator().next().getBodyAsString());
 		return Response.status(200).entity("Read wallet of public address " + service.getWalletPublicAddress()).build();
+	}
+	
+	@POST
+	@Path("/deploy")
+	@Consumes("multipart/form-data")
+	public Response deploy(MultipartFormDataInput input) throws Exception {
+		Map<String, List<InputPart>> formParts = input.getFormDataMap();
+		File f = storeWalletFile(formParts.get("file").iterator().next());
+		String password = formParts.get("password").iterator().next().getBodyAsString();
+		BallotService service = new BallotService(f, password);
+		
+		int proposals = Integer.valueOf(formParts.get("proposals").iterator().next().getBodyAsString());
+		String secondBeneficiary = formParts.get("secondBeneficiary").iterator().next().getBodyAsString();
+		int perc = Integer.valueOf(formParts.get("perc").iterator().next().getBodyAsString());
+		long capEth = Integer.valueOf(formParts.get("capEth").iterator().next().getBodyAsString());
+		BigInteger cap = new BigInteger("1000000000000000000").multiply(BigInteger.valueOf(capEth));
+		String contractAddress = service.deploy(proposals, secondBeneficiary, perc, cap);
+		return Response.status(200).entity("Contract deployed at address " + contractAddress).build();
+	}
+	
+	@POST
+	@Path("/vote")
+	@Consumes("multipart/form-data")
+	public Response vote(MultipartFormDataInput input) throws Exception {
+		Map<String, List<InputPart>> formParts = input.getFormDataMap();
+		File f = storeWalletFile(formParts.get("file").iterator().next());
+		String password = formParts.get("password").iterator().next().getBodyAsString();
+		BallotService service = new BallotService(f, password);
+		
+		String contractAddress = formParts.get("contractAddress").iterator().next().getBodyAsString();
+		int proposal = Integer.valueOf(formParts.get("proposal").iterator().next().getBodyAsString());
+		String amount = formParts.get("amount").iterator().next().getBodyAsString();
+		
+		service.load(contractAddress);
+		BigInteger gasUsed = service.vote(proposal, new BigInteger(amount));
+		
+		return Response.status(200).entity("Vote, used gas: " + gasUsed).build();
 	}
 	
 	private File storeWalletFile(InputPart inputPart) throws IOException {
